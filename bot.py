@@ -201,3 +201,206 @@ def check_join_button(call):
             call.id,
             "هنوز عضو کانال نیستید ❌"
         )
+# =====================
+# ADMIN PANEL
+# =====================
+
+@bot.message_handler(
+    commands=["admin"]
+)
+def admin_panel(message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+
+    kb = telebot.types.InlineKeyboardMarkup()
+
+
+    kb.add(
+        telebot.types.InlineKeyboardButton(
+            "➕ افزودن مود",
+            callback_data="add_mod"
+        )
+    )
+
+
+    kb.add(
+        telebot.types.InlineKeyboardButton(
+            "📊 آمار",
+            callback_data="stats"
+        )
+    )
+
+
+    bot.send_message(
+        message.chat.id,
+        "🛠 پنل مدیریت Onyx Street",
+        reply_markup=kb
+    )
+
+
+
+# =====================
+# ADD MOD START
+# =====================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data=="add_mod"
+)
+def add_mod(call):
+
+    if call.from_user.id != ADMIN_ID:
+        return
+
+
+    adding[call.message.chat.id] = {}
+
+
+    bot.send_message(
+        call.message.chat.id,
+        "🚗 نام مود را ارسال کن:"
+    )
+
+
+    bot.register_next_step_handler(
+        call.message,
+        get_name
+    )
+
+
+
+def get_name(message):
+
+    adding[message.chat.id]["name"] = message.text
+
+
+    bot.send_message(
+        message.chat.id,
+        "🎮 نام بازی را ارسال کن:\nمثال: NFS Most Wanted 2012"
+    )
+
+
+    bot.register_next_step_handler(
+        message,
+        get_game
+    )
+
+
+
+def get_game(message):
+
+    adding[message.chat.id]["game"] = message.text
+
+
+    bot.send_message(
+        message.chat.id,
+        "🖼 عکس مود را ارسال کن:"
+    )
+
+
+    bot.register_next_step_handler(
+        message,
+        get_photo
+    )
+
+
+
+def get_photo(message):
+
+    if not message.photo:
+
+        bot.send_message(
+            message.chat.id,
+            "❌ فقط عکس ارسال کن"
+        )
+
+        return
+
+
+    adding[message.chat.id]["photo"] = (
+        message.photo[-1].file_id
+    )
+
+
+    bot.send_message(
+        message.chat.id,
+        "📝 توضیحات مود را ارسال کن:"
+    )
+
+
+    bot.register_next_step_handler(
+        message,
+        get_description
+    )
+
+
+
+def get_description(message):
+
+    adding[message.chat.id]["description"] = message.text
+
+
+    bot.send_message(
+        message.chat.id,
+        "📦 فایل مود را ارسال کن (ZIP/RAR):"
+    )
+
+
+    bot.register_next_step_handler(
+        message,
+        get_file
+    )
+
+
+
+def get_file(message):
+
+    if not message.document:
+
+        bot.send_message(
+            message.chat.id,
+            "❌ فایل ارسال نشده"
+        )
+
+        return
+
+
+
+    adding[message.chat.id]["file_id"] = (
+        message.document.file_id
+    )
+
+
+    data = adding[message.chat.id]
+
+
+    cursor.execute(
+        """
+        INSERT INTO mods
+        (
+        name,
+        game,
+        photo,
+        description,
+        file_id
+        )
+        VALUES (?,?,?,?,?)
+        """,
+
+        (
+            data["name"],
+            data["game"],
+            data["photo"],
+            data["description"],
+            data["file_id"]
+        )
+    )
+
+
+    db.commit()
+
+
+    bot.send_message(
+        message.chat.id,
+        "✅ مود با
