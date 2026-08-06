@@ -200,8 +200,7 @@ def check_join_button(call):
         bot.answer_callback_query(
             call.id,
             "هنوز عضو کانال نیستید ❌"
-        )
-# =====================
+    )# =====================
 # ADMIN PANEL
 # =====================
 
@@ -403,4 +402,36 @@ def get_file(message):
 
     bot.send_message(
         message.chat.id,
-        "✅ مود با
+        "✅ مود با موفقیت اضافه شد"
+    )
+
+
+    del adding[message.chat.id]
+
+
+
+# =====================
+# ADMIN STATS
+# =====================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data=="stats"
+)
+def stats(call):
+
+    if call.from_user.id != ADMIN_ID:
+        return
+
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM mods"
+    )
+
+
+    count = cursor.fetchone()[0]
+
+
+    bot.send_message(
+        call.message.chat.id,
+        f"📦 تعداد مودها: {count}"
+    )
