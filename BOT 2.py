@@ -2,14 +2,14 @@
 Onyx Street Telegram Bot (Starter Template)
 
 TODO:
-- Replace TOKEN
-- Replace CHANNEL
+- Replace 8926088350:AAElvXxA3gADwdLbEFxyZ3WIiyIi0qow74Q
+- Replace @Onyx_Street
 """
 
 import telebot
 import sqlite3
 
-TOKEN = "YOUR_BOT_TOKEN"
+TOKEN = "8926088350:AAElvXxA3gADwdLbEFxyZ3WIiyIi0qow74Q"
 ADMIN_ID = 8356358583
 CHANNEL = "@Onyx_Street"
 CHANNEL_LINK = "https://t.me/Onyx_Street"
