@@ -140,16 +140,17 @@ def start(message):
     bot.send_message(
         message.chat.id,
         """
+bot.send_message(
+    message.chat.id,
+    """
 🚗 Onyx Street
 
 به ربات دانلود مود خوش آمدید
 
-از منو استفاده کنید 👇
-"""
-    )
-
-
-
+یک گزینه انتخاب کنید 👇
+""",
+    reply_markup=main_menu()
+)
 print("Onyx Street Bot Started")
 
 # =========================
