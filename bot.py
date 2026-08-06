@@ -8,18 +8,26 @@ ADMIN_ID = 8356358583
 CHANNEL = "@Onyx_Street"
 CHANNEL_LINK = "https://t.me/Onyx_Street"
 
+BOT_USERNAME = "OnyxStreetBot"
+
 bot = telebot.TeleBot(TOKEN)
 
 db = sqlite3.connect("links.db", check_same_thread=False)
 cursor = db.cursor()
 
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS links (
+CREATE TABLE IF NOT EXISTS mods (
     id INTEGER PRIMARY KEY,
+    name TEXT,
+    photo TEXT,
+    description TEXT,
     url TEXT
 )
 """)
 db.commit()
+
+
+waiting = {}
 
 
 def check_membership(user_id):
@@ -30,10 +38,12 @@ def check_membership(user_id):
         return False
 
 
+# Start
 @bot.message_handler(commands=["start"])
 def start(message):
 
     if not check_membership(message.from_user.id):
+
         markup = telebot.types.InlineKeyboardMarkup()
 
         join = telebot.types.InlineKeyboardButton(
@@ -51,42 +61,68 @@ def start(message):
 
         bot.send_message(
             message.chat.id,
-            "⚠️ برای استفاده از ربات ابتدا عضو کانال شوید:",
+            "⚠️ ابتدا عضو کانال شوید:",
             reply_markup=markup
         )
         return
 
+
     args = message.text.split()
 
     if len(args) > 1:
-        code = args[1]
+
+        mod_id = args[1]
 
         cursor.execute(
-            "SELECT url FROM links WHERE id=?",
-            (code,)
+            "SELECT name, photo, description, url FROM mods WHERE id=?",
+            (mod_id,)
         )
 
-        result = cursor.fetchone()
+        mod = cursor.fetchone()
 
-        if result:
-            bot.send_message(
-                message.chat.id,
-                f"📦 لینک دانلود مود:\n\n{result[0]}"
+        if mod:
+
+            name, photo, description, url = mod
+
+            markup = telebot.types.InlineKeyboardMarkup()
+
+            btn = telebot.types.InlineKeyboardButton(
+                "⬇️ دانلود مود",
+                url=url
             )
+
+            markup.add(btn)
+
+            bot.send_photo(
+                message.chat.id,
+                photo,
+                caption=f"""
+🚗 {name}
+
+📝 توضیحات:
+{description}
+
+🔥 Onyx Street
+""",
+                reply_markup=markup
+            )
+
         else:
             bot.send_message(
                 message.chat.id,
-                "❌ لینک پیدا نشد"
+                "❌ مود پیدا نشد"
             )
 
     else:
+
         bot.send_message(
             message.chat.id,
             "سلام 👋\nبه Onyx Street خوش آمدید 🚗"
         )
 
 
-@bot.callback_query_handler(func=lambda call: call.data == "check_join")
+# Check join
+@bot.callback_query_handler(func=lambda call: call.data=="check_join")
 def check_join(call):
 
     if check_membership(call.from_user.id):
@@ -97,7 +133,7 @@ def check_join(call):
 
         bot.send_message(
             call.message.chat.id,
-            "✅ دسترسی شما فعال شد"
+            "✅ حالا می‌توانید از ربات استفاده کنید"
         )
 
     else:
@@ -107,68 +143,128 @@ def check_join(call):
         )
 
 
+# Add mod
 @bot.message_handler(commands=["add"])
-def add_link(message):
+def add_mod(message):
 
     if message.from_user.id != ADMIN_ID:
         return
 
-    url = message.text.replace("/add ", "")
+    waiting[message.chat.id] = {}
+
+    bot.send_message(
+        message.chat.id,
+        "🚗 اسم مود را ارسال کن:"
+    )
+
+    bot.register_next_step_handler(
+        message,
+        get_name
+    )
+
+
+def get_name(message):
+
+    waiting[message.chat.id]["name"] = message.text
+
+    bot.send_message(
+        message.chat.id,
+        "🖼 عکس مود را ارسال کن:"
+    )
+
+    bot.register_next_step_handler(
+        message,
+        get_photo
+    )
+
+
+def get_photo(message):
+
+    waiting[message.chat.id]["photo"] = message.photo[-1].file_id
+
+    bot.send_message(
+        message.chat.id,
+        "📝 توضیحات مود:"
+    )
+
+    bot.register_next_step_handler(
+        message,
+        get_description
+    )
+
+
+def get_description(message):
+
+    waiting[message.chat.id]["description"] = message.text
+
+    bot.send_message(
+        message.chat.id,
+        "🔗 لینک دانلود:"
+    )
+
+    bot.register_next_step_handler(
+        message,
+        save_mod
+    )
+
+
+def save_mod(message):
+
+    data = waiting[message.chat.id]
 
     cursor.execute(
-        "INSERT INTO links(url) VALUES(?)",
-        (url,)
+        """
+        INSERT INTO mods(name,photo,description,url)
+        VALUES(?,?,?,?)
+        """,
+        (
+            data["name"],
+            data["photo"],
+            data["description"],
+            message.text
+        )
     )
 
     db.commit()
 
-    code = cursor.lastrowid
+    mod_id = cursor.lastrowid
 
     bot.send_message(
         message.chat.id,
-        f"✅ ذخیره شد\n\n"
-        f"لینک دانلود:\n"
-        f"https://t.me/OnyxStreetBot?start={code}"
+        f"""
+✅ مود ذخیره شد
+
+🔗 لینک:
+https://t.me/{BOT_USERNAME}?start={mod_id}
+"""
     )
 
+    del waiting[message.chat.id]
 
+
+# Admin panel
 @bot.message_handler(commands=["admin"])
-def admin_panel(message):
+def admin(message):
 
     if message.from_user.id != ADMIN_ID:
         return
 
-    markup = telebot.types.InlineKeyboardMarkup()
-
-    stats = telebot.types.InlineKeyboardButton(
-        "📊 آمار لینک‌ها",
-        callback_data="stats"
-    )
-
-    markup.add(stats)
-
-    bot.send_message(
-        message.chat.id,
-        "🛠 پنل مدیریت Onyx Street",
-        reply_markup=markup
-    )
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "stats")
-def stats(call):
-
-    if call.from_user.id != ADMIN_ID:
-        return
-
     cursor.execute(
-        "SELECT COUNT(*) FROM links"
+        "SELECT COUNT(*) FROM mods"
     )
 
     count = cursor.fetchone()[0]
 
     bot.send_message(
-        call.message.chat.id,
-        f"📦 تعداد لینک‌های ثبت شده: {count}"
+        message.chat.id,
+        f"""
+🛠 پنل مدیریت Onyx Street
+
+📦 تعداد مودها: {count}
+
+برای افزودن مود:
+ /add
+"""
     )
 
 
