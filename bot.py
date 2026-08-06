@@ -515,5 +515,8 @@ def admin_command(message):
         "⚙️ پنل مدیریت:",
         reply_markup=kb
     )
+    @bot.message_handler(commands=["admin"])
+def admin_test(message):
+    bot.reply_to(message, "پنل ادمین فعال شد")
 
 bot.infinity_polling()
