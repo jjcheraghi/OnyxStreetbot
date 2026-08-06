@@ -476,6 +476,44 @@ def delete_confirm(call):
         call.id,
         "✅ مود حذف شد",
         show_alert=True
-    )       
+    )  
+    @bot.message_handler(commands=["admin"])
+def admin_command(message):
+
+    if message.from_user.id != ADMIN_ID:
+        bot.reply_to(
+            message,
+            "❌ دسترسی ندارید."
+        )
+        return
+
+    kb = types.InlineKeyboardMarkup()
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "➕ افزودن مود",
+            callback_data="add"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🗑 حذف مود",
+            callback_data="delete"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "📊 آمار",
+            callback_data="stats"
+        )
+    )
+
+    bot.send_message(
+        message.chat.id,
+        "⚙️ پنل مدیریت:",
+        reply_markup=kb
+    )
 
 bot.infinity_polling()
