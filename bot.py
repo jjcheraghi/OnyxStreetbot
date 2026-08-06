@@ -434,4 +434,271 @@ def stats(call):
     bot.send_message(
         call.message.chat.id,
         f"📦 تعداد مودها: {count}"
+    )# =====================
+# SHOW LATEST MODS
+# =====================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data=="latest"
+)
+def latest(call):
+
+    cursor.execute(
+        """
+        SELECT id,name,game
+        FROM mods
+        ORDER BY id DESC
+        LIMIT 10
+        """
     )
+
+    mods = cursor.fetchall()
+
+
+    if not mods:
+
+        bot.send_message(
+            call.message.chat.id,
+            "❌ هنوز مود ثبت نشده"
+        )
+
+        return
+
+
+    kb = telebot.types.InlineKeyboardMarkup()
+
+
+    for mod in mods:
+
+        kb.add(
+            telebot.types.InlineKeyboardButton(
+                f"🚗 {mod[1]}",
+                callback_data=f"show_{mod[0]}"
+            )
+        )
+
+
+    bot.send_message(
+        call.message.chat.id,
+        "🔥 جدیدترین مودها:",
+        reply_markup=kb
+    )
+
+
+
+# =====================
+# SHOW MOD
+# =====================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith("show_")
+)
+def show_mod(call):
+
+    mod_id = call.data.replace(
+        "show_",
+        ""
+    )
+
+
+    cursor.execute(
+        """
+        SELECT name,game,photo,description,downloads
+        FROM mods
+        WHERE id=?
+        """,
+        (mod_id,)
+    )
+
+
+    mod = cursor.fetchone()
+
+
+    if not mod:
+        return
+
+
+    name, game, photo, desc, downloads = mod
+
+
+    kb = telebot.types.InlineKeyboardMarkup()
+
+
+    kb.add(
+        telebot.types.InlineKeyboardButton(
+            "⬇️ دانلود مود",
+            callback_data=f"download_{mod_id}"
+        )
+    )
+
+
+    bot.send_photo(
+        call.message.chat.id,
+
+        photo,
+
+        caption=f"""
+🚗 {name}
+
+🎮 بازی:
+{game}
+
+📝 توضیحات:
+{desc}
+
+⬇️ تعداد دانلود:
+{downloads}
+""",
+
+        reply_markup=kb
+    )
+
+
+
+# =====================
+# DOWNLOAD
+# =====================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith("download_")
+)
+def download(call):
+
+    mod_id = call.data.replace(
+        "download_",
+        ""
+    )
+
+
+    cursor.execute(
+        """
+        SELECT file_id
+        FROM mods
+        WHERE id=?
+        """,
+        (mod_id,)
+    )
+
+
+    result = cursor.fetchone()
+
+
+    if not result:
+
+        bot.answer_callback_query(
+            call.id,
+            "فایل پیدا نشد ❌"
+        )
+
+        return
+
+
+
+    file_id = result[0]
+
+
+    cursor.execute(
+        """
+        UPDATE mods
+        SET downloads = downloads + 1
+        WHERE id=?
+        """,
+        (mod_id,)
+    )
+
+
+    db.commit()
+
+
+
+    bot.send_document(
+        call.message.chat.id,
+        file_id,
+        caption="🔥 دانلود از Onyx Street"
+    )
+
+
+
+# =====================
+# SEARCH
+# =====================
+
+@bot.message_handler(
+    commands=["search"]
+)
+def search(message):
+
+    bot.send_message(
+        message.chat.id,
+        "🔎 اسم مود یا بازی را بفرست:"
+    )
+
+    bot.register_next_step_handler(
+        message,
+        search_result
+    )
+
+
+
+def search_result(message):
+
+    text = message.text
+
+
+    cursor.execute(
+        """
+        SELECT id,name,game
+        FROM mods
+        WHERE name LIKE ?
+        OR game LIKE ?
+        """,
+
+        (
+            f"%{text}%",
+            f"%{text}%"
+        )
+    )
+
+
+    results = cursor.fetchall()
+
+
+    if not results:
+
+        bot.send_message(
+            message.chat.id,
+            "❌ چیزی پیدا نشد"
+        )
+
+        return
+
+
+
+    kb = telebot.types.InlineKeyboardMarkup()
+
+
+    for mod in results:
+
+        kb.add(
+            telebot.types.InlineKeyboardButton(
+                mod[1],
+                callback_data=f"show_{mod[0]}"
+            )
+        )
+
+
+    bot.send_message(
+        message.chat.id,
+        "🔎 نتایج:",
+        reply_markup=kb
+    )
+
+
+
+# =====================
+# RUN BOT
+# =====================
+
+print("Onyx Street Bot Started")
+
+bot.infinity_polling()
