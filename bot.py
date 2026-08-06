@@ -74,80 +74,58 @@ def check_membership(user_id):
 # جوین اجباری
 def join_keyboard():
 
-    markup = telebot.types.InlineKeyboardMarkup()
-
-    join = telebot.types.InlineKeyboardButton(
-        "📢 عضویت در کانال",
-        url=CHANNEL_LINK
-    )
-
-    check = telebot.types.InlineKeyboardButton(
-        "✅ بررسی عضویت",
-        callback_data="check_join"
-    )
-
-    markup.add(join)
-    markup.add(check)
-
-    return markup
-
-
-
-@bot.callback_query_handler(
-    func=lambda call: call.data == "check_join"
-)
-def check_join(call):
-
-    if check_membership(call.from_user.id):
-
-        bot.answer_callback_query(
-            call.id,
-            "عضویت تایید شد ✅"
-        )
-
-        bot.send_message(
-            call.message.chat.id,
-            "✅ دسترسی فعال شد"
-        )
-
-    else:
-
-        bot.answer_callback_query(
-            call.id,
-            "هنوز عضو کانال نیستید ❌"
-        )
-
-
-
-@bot.message_handler(commands=["start"])
+    @bot.message_handler(commands=["start"])
 def start(message):
 
     save_user(message.from_user.id)
 
-    if not check_membership(
-        message.from_user.id
-    ):
+    if not check_membership(message.from_user.id):
 
         bot.send_message(
             message.chat.id,
             "⚠️ برای استفاده از ربات ابتدا عضو کانال شوید:",
             reply_markup=join_keyboard()
         )
-
         return
+
+
+    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+
+    latest = telebot.types.InlineKeyboardButton(
+        "🔥 جدیدترین مودها",
+        callback_data="latest"
+    )
+
+    games = telebot.types.InlineKeyboardButton(
+        "🎮 دسته‌بندی بازی‌ها",
+        callback_data="games"
+    )
+
+    search = telebot.types.InlineKeyboardButton(
+        "🔎 جستجو",
+        callback_data="search"
+    )
+
+    channel = telebot.types.InlineKeyboardButton(
+        "📢 کانال ما",
+        url=CHANNEL_LINK
+    )
+
+    markup.add(latest, games)
+    markup.add(search, channel)
 
 
     bot.send_message(
         message.chat.id,
         """
-bot.send_message(
-    message.chat.id,
-    """
 🚗 Onyx Street
 
-به ربات دانلود مود خوش آمدید
+مرجع دانلود مود بازی‌ها
 
-یک گزینه انتخاب کنید 👇
+یک گزینه را انتخاب کنید 👇
+""",
+        reply_markup=markup
+    )
 """,
     reply_markup=main_menu()
 )
