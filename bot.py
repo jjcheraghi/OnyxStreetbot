@@ -5,8 +5,8 @@ TOKEN = "8926088350:AAElvXxA3gADwdLbEFxyZ3WIiyIi0qow74Q"
 
 ADMIN_ID = 8356358583
 
-CHANNEL = "@OnyxStreet"
-CHANNEL_LINK = "https://t.me/OnyxStreet"
+CHANNEL = "@Onyx_Street"
+CHANNEL_LINK = "https://t.me/Onyx_Street"
 
 bot = telebot.TeleBot(TOKEN)
 
