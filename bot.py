@@ -56,7 +56,6 @@ def start(message):
         )
         return
 
-
     args = message.text.split()
 
     if len(args) > 1:
