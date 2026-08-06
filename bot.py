@@ -11,23 +11,47 @@ CHANNEL_LINK = "https://t.me/Onyx_Street"
 bot = telebot.TeleBot(TOKEN)
 
 
-db = sqlite3.connect("onyx.db", check_same_thread=False)
+# =====================
+# DATABASE
+# =====================
+
+db = sqlite3.connect(
+    "onyx.db",
+    check_same_thread=False
+)
+
 cursor = db.cursor()
+
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS mods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     game TEXT,
-    link TEXT
+    photo TEXT,
+    description TEXT,
+    file_id TEXT,
+    downloads INTEGER DEFAULT 0
 )
 """)
+
 
 db.commit()
 
 
+# ذخیره اطلاعات موقت ادمین
+adding = {}
+
+
+
+# =====================
+# JOIN CHECK
+# =====================
+
 def check_join(user_id):
+
     try:
+
         member = bot.get_chat_member(
             CHANNEL,
             user_id
@@ -40,253 +64,140 @@ def check_join(user_id):
         ]
 
     except:
+
         return False
 
 
 
-def menu():
+def join_keyboard():
 
     kb = telebot.types.InlineKeyboardMarkup()
 
     kb.add(
         telebot.types.InlineKeyboardButton(
-            "🔥 مودها",
-            callback_data="mods"
+            "📢 عضویت در کانال",
+            url=CHANNEL_LINK
         )
     )
 
     kb.add(
+        telebot.types.InlineKeyboardButton(
+            "✅ بررسی عضویت",
+            callback_data="check_join"
+        )
+    )
+
+    return kb
+
+
+
+# =====================
+# MAIN MENU
+# =====================
+
+def main_menu():
+
+    kb = telebot.types.InlineKeyboardMarkup(
+        row_width=2
+    )
+
+
+    kb.add(
+        telebot.types.InlineKeyboardButton(
+            "🔥 جدیدترین مودها",
+            callback_data="latest"
+        ),
+
+        telebot.types.InlineKeyboardButton(
+            "🎮 بازی‌ها",
+            callback_data="games"
+        )
+    )
+
+
+    kb.add(
+        telebot.types.InlineKeyboardButton(
+            "🔎 جستجو",
+            callback_data="search"
+        ),
+
         telebot.types.InlineKeyboardButton(
             "📢 کانال",
             url=CHANNEL_LINK
         )
     )
 
-    return kb
-
-
-
-def join_menu():
-
-    kb = telebot.types.InlineKeyboardMarkup()
-
-    kb.add(
-        telebot.types.InlineKeyboardButton(
-            "📢 عضویت",
-            url=CHANNEL_LINK
-        )
-    )
-
-    kb.add(
-        telebot.types.InlineKeyboardButton(
-            "✅ بررسی",
-            callback_data="check"
-        )
-    )
 
     return kb
 
 
 
-@bot.message_handler(commands=["start"])
+# =====================
+# START
+# =====================
+
+@bot.message_handler(
+    commands=["start"]
+)
 def start(message):
 
-    if not check_join(message.from_user.id):
+    if not check_join(
+        message.from_user.id
+    ):
 
         bot.send_message(
             message.chat.id,
-            "⚠️ ابتدا عضو کانال شوید",
-            reply_markup=join_menu()
+            "⚠️ ابتدا عضو کانال شوید:",
+            reply_markup=join_keyboard()
         )
 
         return
 
 
+
     bot.send_message(
         message.chat.id,
+
         """
 🚗 Onyx Street
 
-خوش آمدید 👋
+مرجع دانلود مود بازی‌ها
 
-از منو استفاده کنید:
+یک گزینه انتخاب کنید 👇
 """,
-        reply_markup=menu()
+
+        reply_markup=main_menu()
     )
 
 
 
-@bot.callback_query_handler(
-    func=lambda c:c.data=="check"
-)
-def check(c):
+# =====================
+# CHECK JOIN BUTTON
+# =====================
 
-    if check_join(c.from_user.id):
+@bot.callback_query_handler(
+    func=lambda call: call.data=="check_join"
+)
+def check_join_button(call):
+
+    if check_join(
+        call.from_user.id
+    ):
 
         bot.answer_callback_query(
-            c.id,
+            call.id,
             "عضویت تایید شد ✅"
         )
 
         bot.send_message(
-            c.message.chat.id,
-            "حالا /start بزن"
+            call.message.chat.id,
+            "✅ حالا /start را بزنید"
         )
+
 
     else:
 
         bot.answer_callback_query(
-            c.id,
-            "عضو نیستید ❌"
+            call.id,
+            "هنوز عضو کانال نیستید ❌"
         )
-
-
-
-@bot.callback_query_handler(
-    func=lambda c:c.data=="mods"
-)
-def mods(c):
-
-    cursor.execute(
-        "SELECT id,name,game FROM mods"
-    )
-
-    data = cursor.fetchall()
-
-
-    if not data:
-
-        bot.send_message(
-            c.message.chat.id,
-            "❌ هنوز مود ثبت نشده"
-        )
-
-        return
-
-
-    text = "🔥 مودها:\n\n"
-
-    for x in data:
-
-        text += f"""
-🚗 {x[1]}
-🎮 {x[2]}
-
-/mod{x[0]}
-"""
-
-
-    bot.send_message(
-        c.message.chat.id,
-        text
-    )
-
-
-
-@bot.message_handler(commands=["mod"])
-def mod(message):
-
-    mid = message.text.replace(
-        "/mod",
-        ""
-    )
-
-    cursor.execute(
-        "SELECT name,game,link FROM mods WHERE id=?",
-        (mid,)
-    )
-
-    x = cursor.fetchone()
-
-
-    if x:
-
-        bot.send_message(
-            message.chat.id,
-            f"""
-🚗 {x[0]}
-
-🎮 {x[1]}
-
-⬇️ دانلود:
-{x[2]}
-"""
-        )
-
-    else:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ پیدا نشد"
-        )
-
-
-
-@bot.message_handler(commands=["add"])
-def add(message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-
-    text = message.text.split("|")
-
-
-    if len(text) != 4:
-
-        bot.send_message(
-            message.chat.id,
-            """
-فرمت:
-
-/add | اسم مود | بازی | لینک
-"""
-        )
-
-        return
-
-
-    cursor.execute(
-        """
-        INSERT INTO mods
-        (name,game,link)
-        VALUES(?,?,?)
-        """,
-        (
-            text[1],
-            text[2],
-            text[3]
-        )
-    )
-
-    db.commit()
-
-
-    bot.send_message(
-        message.chat.id,
-        "✅ مود اضافه شد"
-    )
-
-
-
-@bot.message_handler(commands=["admin"])
-def admin(message):
-
-    if message.from_user.id == ADMIN_ID:
-
-        bot.send_message(
-            message.chat.id,
-            """
-🛠 پنل ادمین
-
-افزودن مود:
-
-/add | اسم | بازی | لینک
-"""
-        )
-
-
-
-print("Onyx Street Bot Running")
-
-bot.infinity_polling()
