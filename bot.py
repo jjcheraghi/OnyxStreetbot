@@ -242,3 +242,143 @@ def get_photo(message):
         message.chat.id,
         "Send file or link:"
     )
+    @bot.message_handler(
+    func=lambda m:
+    admin(m.from_user.id)
+    and m.from_user.id in state
+    and state[m.from_user.id]["step"]=="file"
+)
+def get_link(message):
+
+    data = state[message.from_user.id]
+
+    if message.text:
+
+        con = db()
+        cur = con.cursor()
+
+        cur.execute(
+            """
+            INSERT INTO mods
+            (name,photo,type,url)
+            VALUES (?,?,?,?)
+            """,
+            (
+                data["name"],
+                data.get("photo"),
+                "link",
+                message.text
+            )
+        )
+
+        mod_id = cur.lastrowid
+
+        con.commit()
+        con.close()
+
+
+        del state[message.from_user.id]
+
+
+        link = (
+            f"https://t.me/"
+            f"{BOT_USERNAME}"
+            f"?start={mod_id}"
+        )
+
+
+        bot.send_message(
+            message.chat.id,
+            f"Mod Added\n\nLink:\n{link}"
+        )
+
+
+
+@bot.message_handler(
+    content_types=["document"]
+)
+def get_file(message):
+
+    if not admin(message.from_user.id):
+        return
+
+    if message.from_user.id not in state:
+        return
+
+
+    data = state[message.from_user.id]
+
+
+    con = db()
+    cur = con.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO mods
+        (name,photo,type,file_id)
+        VALUES (?,?,?,?)
+        """,
+        (
+            data["name"],
+            data.get("photo"),
+            "file",
+            message.document.file_id
+        )
+    )
+
+    mod_id = cur.lastrowid
+
+    con.commit()
+    con.close()
+
+
+    del state[message.from_user.id]
+
+
+    link = (
+        f"https://t.me/"
+        f"{BOT_USERNAME}"
+        f"?start={mod_id}"
+    )
+
+
+    bot.send_message(
+        message.chat.id,
+        f"Mod Added\n\nLink:\n{link}"
+    )
+
+
+
+# ---------- SEND MOD ----------
+
+def send_mod(chat_id, mod_id):
+
+    con = db()
+    cur = con.cursor()
+
+    cur.execute(
+        "SELECT * FROM mods WHERE id=?",
+        (mod_id,)
+    )
+
+    mod = cur.fetchone()
+
+    con.close()
+
+
+    if not mod:
+
+        bot.send_message(
+            chat_id,
+            "Mod not found."
+        )
+        return
+
+
+
+    if mod[2]:
+
+        bot.send_photo(
+            chat_id,
+            mod[2],
+            caption=
