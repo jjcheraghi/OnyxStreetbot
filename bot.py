@@ -11,23 +11,23 @@ BOT_USERNAME = "OnyxStreetbot"
 bot = telebot.TeleBot(TOKEN)
 
 DB = "mods.db"
-state = {}
+admin_state = {}
 
 
-def db():
+# DATABASE
+
+def connect():
     return sqlite3.connect(DB)
 
 
-def setup():
-
-    con = db()
+def setup_db():
+    con = connect()
     cur = con.cursor()
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS mods(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
-        photo TEXT,
         type TEXT,
         file_id TEXT,
         url TEXT
@@ -38,16 +38,18 @@ def setup():
     con.close()
 
 
-setup()
+setup_db()
 
 
 
-def admin(uid):
+# HELPERS
+
+def is_admin(uid):
     return uid == ADMIN_ID
 
 
 
-def check_join(uid):
+def is_joined(uid):
 
     try:
         member = bot.get_chat_member(
@@ -66,7 +68,7 @@ def check_join(uid):
 
 
 
-def join_kb():
+def join_keyboard():
 
     kb = types.InlineKeyboardMarkup()
 
@@ -79,7 +81,7 @@ def join_kb():
 
     kb.add(
         types.InlineKeyboardButton(
-            "I Joined",
+            "Verify",
             callback_data="verify"
         )
     )
@@ -88,6 +90,8 @@ def join_kb():
 
 
 
+# START
+
 @bot.message_handler(commands=["start"])
 def start(message):
 
@@ -95,21 +99,21 @@ def start(message):
 
     if len(args) > 1:
 
-        if not check_join(
+        if not is_joined(
             message.from_user.id
         ):
 
             bot.send_message(
                 message.chat.id,
-                "Join the channel first.",
-                reply_markup=join_kb()
+                "Join channel first.",
+                reply_markup=join_keyboard()
             )
             return
 
 
         send_mod(
             message.chat.id,
-            int(args[1])
+            args[1]
         )
 
         return
@@ -127,33 +131,28 @@ def start(message):
 )
 def verify(call):
 
-    if check_join(
-        call.from_user.id
-    ):
+    if is_joined(call.from_user.id):
 
         bot.answer_callback_query(
             call.id,
             "Verified"
         )
 
-        bot.send_message(
-            call.message.chat.id,
-            "Now open the mod link."
-        )
-
     else:
 
         bot.answer_callback_query(
             call.id,
-            "Not joined yet"
+            "Not joined"
         )
 
 
 
+# ADMIN PANEL
+
 @bot.message_handler(commands=["admin"])
 def admin_panel(message):
 
-    if not admin(
+    if not is_admin(
         message.from_user.id
     ):
         return
@@ -177,7 +176,7 @@ def admin_panel(message):
 
     kb.add(
         types.InlineKeyboardButton(
-            "My Mods",
+            "List Mods",
             callback_data="list"
         )
     )
@@ -191,14 +190,17 @@ def admin_panel(message):
 
 
 
+# ADD MOD
+
 @bot.callback_query_handler(
     func=lambda c:c.data=="add"
 )
-def add_start(call):
+def add_mod(call):
 
-    state[call.from_user.id] = {
-        "step":"name"
-    }
+    admin_state[
+        call.from_user.id
+    ] = "name"
+
 
     bot.send_message(
         call.message.chat.id,
@@ -209,393 +211,20 @@ def add_start(call):
 
 @bot.message_handler(
     func=lambda m:
-    admin(m.from_user.id)
-    and m.from_user.id in state
-    and state[m.from_user.id]["step"]=="name"
+    is_admin(m.from_user.id)
+    and admin_state.get(m.from_user.id)=="name"
 )
 def get_name(message):
 
-    state[message.from_user.id]["name"] = message.text
+    admin_state[
+        message.from_user.id
+    ] = {
+        "name":message.text,
+        "step":"file"
+    }
 
-    state[message.from_user.id]["step"] = "photo"
-
-    bot.send_message(
-        message.chat.id,
-        "Send cover image or type skip:"
-    )
-
-
-
-@bot.message_handler(
-    content_types=["photo"]
-)
-def get_photo(message):
-
-    if message.from_user.id not in state:
-        return
-
-    state[message.from_user.id]["photo"] = message.photo[-1].file_id
-
-    state[message.from_user.id]["step"] = "file"
 
     bot.send_message(
         message.chat.id,
         "Send file or link:"
     )
-    @bot.message_handler(
-    func=lambda m:
-    admin(m.from_user.id)
-    and m.from_user.id in state
-    and state[m.from_user.id]["step"]=="file"
-)
-def get_link(message):
-
-    data = state[message.from_user.id]
-
-    if message.text:
-
-        con = db()
-        cur = con.cursor()
-
-        cur.execute(
-            """
-            INSERT INTO mods
-            (name,photo,type,url)
-            VALUES (?,?,?,?)
-            """,
-            (
-                data["name"],
-                data.get("photo"),
-                "link",
-                message.text
-            )
-        )
-
-        mod_id = cur.lastrowid
-
-        con.commit()
-        con.close()
-
-
-        del state[message.from_user.id]
-
-
-        link = (
-            f"https://t.me/"
-            f"{BOT_USERNAME}"
-            f"?start={mod_id}"
-        )
-
-
-        bot.send_message(
-            message.chat.id,
-            f"Mod Added\n\nLink:\n{link}"
-        )
-
-
-
-@bot.message_handler(
-    content_types=["document"]
-)
-def get_file(message):
-
-    if not admin(message.from_user.id):
-        return
-
-    if message.from_user.id not in state:
-        return
-
-
-    data = state[message.from_user.id]
-
-
-    con = db()
-    cur = con.cursor()
-
-    cur.execute(
-        """
-        INSERT INTO mods
-        (name,photo,type,file_id)
-        VALUES (?,?,?,?)
-        """,
-        (
-            data["name"],
-            data.get("photo"),
-            "file",
-            message.document.file_id
-        )
-    )
-
-    mod_id = cur.lastrowid
-
-    con.commit()
-    con.close()
-
-
-    del state[message.from_user.id]
-
-
-    link = (
-        f"https://t.me/"
-@bot.message_handler(
-    func=lambda m:
-    admin(m.from_user.id)
-    and m.from_user.id in state
-    and state[m.from_user.id]["step"]=="file"
-)
-def get_link(message):
-
-    data = state[message.from_user.id]
-
-    if message.text:
-
-        con = db()
-        cur = con.cursor()
-
-        cur.execute(
-            """
-            INSERT INTO mods
-            (name,photo,type,url)
-            VALUES (?,?,?,?)
-            """,
-            (
-                data["name"],
-                data.get("photo"),
-                "link",
-                message.text
-            )
-        )
-
-        mod_id = cur.lastrowid
-
-        con.commit()
-        con.close()
-
-
-        del state[message.from_user.id]
-
-
-        link = (
-            f"https://t.me/"
-            f"{BOT_USERNAME}"
-            f"?start={mod_id}"
-        )
-
-
-        bot.send_message(
-            message.chat.id,
-            f"Mod Added\n\nLink:\n{link}"
-        )
-
-
-
-@bot.message_handler(
-    content_types=["document"]
-)
-def get_file(message):
-
-    if not admin(message.from_user.id):
-        return
-
-    if message.from_user.id not in state:
-        return
-
-
-    data = state[message.from_user.id]
-
-
-    con = db()
-    cur = con.cursor()
-
-    cur.execute(
-        """
-        INSERT INTO mods
-        (name,photo,type,file_id)
-        VALUES (?,?,?,?)
-        """,
-        (
-            data["name"],
-            data.get("photo"),
-            "file",
-            message.document.file_id
-        )
-    )
-
-    mod_id = cur.lastrowid
-
-    con.commit()
-    con.close()
-
-
-    del state[message.from_user.id]
-
-
-    link = (
-        f"https://t.me/"
-        f"{BOT_USERNAME}"
-        f"?start={mod_id}"
-    )
-
-
-    bot.send_message(
-        message.chat.id,
-        f"Mod Added\n\nLink:\n{link}"
-    )
-
-
-
-# ---------- SEND MOD ----------
-
-def send_mod(chat_id, mod_id):
-
-    con = db()
-    cur = con.cursor()
-
-    cur.execute(
-        "SELECT * FROM mods WHERE id=?",
-        (mod_id,)
-    )
-
-    mod = cur.fetchone()
-
-    con.close()
-
-
-    if not mod:
-
-        bot.send_message(
-            chat_id,
-            "Mod not found."
-        )
-        return
-
-
-
-    if mod[2]:
-
-        bot.send_photo(
-            chat_id,
-            mod[2],
-            caption=mod[1]
-        )
-
-
-    if mod[3]=="file":
-
-        bot.send_document(
-            chat_id,
-            mod[4]
-        )
-
-
-    else:
-
-        kb = types.InlineKeyboardMarkup()
-
-        kb.add(
-            types.InlineKeyboardButton(
-                "Download",
-                url=mod[5]
-            )
-        )
-
-        bot.send_message(
-            chat_id,
-            "Download:",
-            reply_markup=kb
-        )
-
-
-
-# ---------- LIST ----------
-
-@bot.callback_query_handler(
-    func=lambda c:c.data=="list"
-)
-def list_mods(call):
-
-    if not admin(call.from_user.id):
-        return
-
-
-    con=db()
-    cur=con.cursor()
-
-    cur.execute(
-        "SELECT id,name FROM mods"
-    )
-
-    mods=cur.fetchall()
-
-    con.close()
-
-
-    text="Mods:\n\n"
-
-    for m in mods:
-
-        text += f"{m[0]} - {m[1]}\n"
-
-
-    bot.send_message(
-        call.message.chat.id,
-        text
-    )
-
-
-
-# ---------- DELETE ----------
-
-@bot.callback_query_handler(
-    func=lambda c:c.data=="delete"
-)
-def delete_menu(call):
-
-    if not admin(call.from_user.id):
-        return
-
-
-    bot.send_message(
-        call.message.chat.id,
-        "Send mod ID to delete:"
-    )
-
-    state[call.from_user.id]={
-        "step":"delete"
-    }
-
-
-
-@bot.message_handler(
-    func=lambda m:
-    admin(m.from_user.id)
-    and m.from_user.id in state
-    and state[m.from_user.id]["step"]=="delete"
-)
-def delete_mod(message):
-
-    con=db()
-    cur=con.cursor()
-
-    cur.execute(
-        "DELETE FROM mods WHERE id=?",
-        (message.text,)
-    )
-
-    con.commit()
-    con.close()
-
-
-    del state[message.from_user.id]
-
-
-    bot.send_message(
-        message.chat.id,
-        "Deleted."
-    )
-
-
-
-print("ONYX STREET BOT ONLINE")
-
-bot.infinity_polling()
