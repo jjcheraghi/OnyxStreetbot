@@ -7,7 +7,7 @@ TOKEN = "8926088350:AAElvXxA3gADwdLbEFxyZ3WIiyIi0qow74Q"
 ADMIN_ID = 8356358583
 
 CHANNEL = "@Onyx_Street"
-BOT_USERNAME = "@OnyxStreetbot"
+BOT_USERNAME = "OnyxStreetbot"
 
 bot = telebot.TeleBot(TOKEN)
 
