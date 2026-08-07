@@ -362,3 +362,200 @@ def save_file(message):
 
 
     if message.from_user.id not
+# ---------- SEND MOD ----------
+
+def send_mod(chat_id, mod_id):
+
+    conn = db()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT * FROM mods WHERE id=?",
+        (mod_id,)
+    )
+
+    mod = cur.fetchone()
+
+    conn.close()
+
+
+    if not mod:
+
+        bot.send_message(
+            chat_id,
+            "Mod not found."
+        )
+
+        return
+
+
+
+    if mod[2] == "file":
+
+        bot.send_document(
+            chat_id,
+            mod[3],
+            caption=mod[1]
+        )
+
+
+    else:
+
+        kb = types.InlineKeyboardMarkup()
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "Download",
+                url=mod[4]
+            )
+        )
+
+
+        bot.send_message(
+            chat_id,
+            mod[1],
+            reply_markup=kb
+        )
+
+
+
+# ---------- MY MODS ----------
+
+@bot.callback_query_handler(
+    func=lambda c:c.data=="my_mods"
+)
+def my_mods(call):
+
+    if not is_admin(call.from_user.id):
+        return
+
+
+    conn=db()
+    cur=conn.cursor()
+
+    cur.execute(
+        "SELECT id,name FROM mods"
+    )
+
+    mods=cur.fetchall()
+
+    conn.close()
+
+
+    if not mods:
+
+        bot.send_message(
+            call.message.chat.id,
+            "No mods added."
+        )
+
+        return
+
+
+
+    text="Your Mods:\n\n"
+
+
+    for mod in mods:
+
+        text += (
+            f"{mod[0]} - "
+            f"{mod[1]}\n"
+        )
+
+
+    bot.send_message(
+        call.message.chat.id,
+        text
+    )
+
+
+
+# ---------- DELETE ----------
+
+@bot.callback_query_handler(
+    func=lambda c:c.data=="delete_mod"
+)
+def delete_menu(call):
+
+    if not is_admin(call.from_user.id):
+        return
+
+
+    kb=types.InlineKeyboardMarkup()
+
+
+    conn=db()
+    cur=conn.cursor()
+
+
+    cur.execute(
+        "SELECT id,name FROM mods"
+    )
+
+    mods=cur.fetchall()
+
+    conn.close()
+
+
+    for mod in mods:
+
+        kb.add(
+            types.InlineKeyboardButton(
+                f"🗑 {mod[1]}",
+                callback_data=f"del_{mod[0]}"
+            )
+        )
+
+
+    bot.send_message(
+        call.message.chat.id,
+        "Select mod to delete:",
+        reply_markup=kb
+    )
+
+
+
+@bot.callback_query_handler(
+    func=lambda c:c.data.startswith("del_")
+)
+def delete_mod(call):
+
+    if not is_admin(call.from_user.id):
+        return
+
+
+    mod_id=int(
+        call.data.split("_")[1]
+    )
+
+
+    conn=db()
+    cur=conn.cursor()
+
+
+    cur.execute(
+        "DELETE FROM mods WHERE id=?",
+        (mod_id,)
+    )
+
+
+    conn.commit()
+    conn.close()
+
+
+    bot.send_message(
+        call.message.chat.id,
+        "✅ Mod deleted."
+    )
+
+
+
+# ---------- RUN ----------
+
+print("ONYX STREET BOT ONLINE")
+
+
+bot.infinity_polling(
+    skip_pending=True
+    )
