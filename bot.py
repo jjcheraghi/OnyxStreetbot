@@ -1,96 +1,34 @@
 import telebot
-from telebot import types
 import sqlite3
 
 TOKEN = "8926088350:AAElvXxA3gADwdLbEFxyZ3WIiyIi0qow74Q"
-
 ADMIN_ID = 8356358583
-CHANNEL = "@Onyx_Street"
-BOT_USERNAME = "OnyxStreetbot"
+CHANNEL = "@GTAOnyx"
 
 bot = telebot.TeleBot(TOKEN)
 
-DB = "mods.db"
-admin_state = {}
+db = sqlite3.connect("mods.db", check_same_thread=False)
+cur = db.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS mods(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+name TEXT,
+file_id TEXT
+)
+""")
+
+db.commit()
 
 
-# DATABASE
-
-def connect():
-    return sqlite3.connect(DB)
-
-
-def setup_db():
-    con = connect()
-    cur = con.cursor()
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS mods(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        type TEXT,
-        file_id TEXT,
-        url TEXT
-    )
-    """)
-
-    con.commit()
-    con.close()
-
-
-setup_db()
-
-
-
-# HELPERS
-
-def is_admin(uid):
-    return uid == ADMIN_ID
-
-
-
-def is_joined(uid):
-
+def is_joined(user_id):
     try:
-        member = bot.get_chat_member(
-            CHANNEL,
-            uid
-        )
-
-        return member.status in [
-            "member",
-            "administrator",
-            "creator"
-        ]
-
+        member = bot.get_chat_member(CHANNEL, user_id)
+        return member.status != "left"
     except:
         return False
 
 
-
-def join_keyboard():
-
-    kb = types.InlineKeyboardMarkup()
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "Join Channel",
-            url=f"https://t.me/{CHANNEL.replace('@','')}"
-        )
-    )
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "Verify",
-            callback_data="verify"
-        )
-    )
-
-    return kb
-
-
-
-# START
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -99,398 +37,194 @@ def start(message):
 
     if len(args) > 1:
 
-        if not is_joined(
-            message.from_user.id
-        ):
+        if args[1].startswith("mod_"):
 
-            bot.send_message(
-                message.chat.id,
-                "Join channel first.",
-                reply_markup=join_keyboard()
+            mod_id = args[1].replace("mod_", "")
+
+            cur.execute(
+                "SELECT name,file_id FROM mods WHERE id=?",
+                (mod_id,)
             )
-            return
+
+            mod = cur.fetchone()
+
+            if mod:
+
+                if not is_joined(message.from_user.id):
+                    bot.reply_to(
+                        message,
+                        f"ابتدا عضو کانال شوید:\n{CHANNEL}"
+                    )
+                    return
 
 
-        send_mod(
-            message.chat.id,
-            args[1]
-        )
+                bot.send_document(
+                    message.chat.id,
+                    mod[1],
+                    caption=f"{mod[0]}\n\nGTA ONYX"
+                )
 
-        return
+                return
 
 
-    bot.send_message(
-        message.chat.id,
-        "Welcome to ONYX STREET"
+    bot.reply_to(
+        message,
+        "به GTA ONYX Bot خوش آمدید.\n\n/mods"
     )
 
 
 
-@bot.callback_query_handler(
-    func=lambda c:c.data=="verify"
-)
-def verify(call):
+@bot.message_handler(commands=["mods"])
+def mods(message):
 
-    if is_joined(call.from_user.id):
+    if message.from_user.id == ADMIN_ID:
 
-        bot.answer_callback_query(
-            call.id,
-            "Verified"
+        cur.execute(
+            "SELECT id,name FROM mods"
         )
+
+        data = cur.fetchall()
+
+        text="لیست مودها:\n\n"
+
+        for m in data:
+            text += f"{m[0]} | {m[1]}\n"
+
+        bot.reply_to(message,text)
 
     else:
 
-        bot.answer_callback_query(
-            call.id,
-            "Not joined"
+        bot.reply_to(
+            message,
+            "برای دریافت مود از لینک اختصاصی استفاده کنید."
         )
 
 
 
-# ADMIN PANEL
+@bot.message_handler(commands=["panel"])
+def panel(message):
 
-@bot.message_handler(commands=["admin"])
-def admin_panel(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
+    if message.from_user.id != ADMIN_ID:
         return
 
+    bot.reply_to(
+        message,
+        """
+پنل GTA ONYX
 
-    kb = types.InlineKeyboardMarkup()
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "Add Mod",
-            callback_data="add"
-        )
-    )
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "Delete Mod",
-            callback_data="delete"
-        )
-    )
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "List Mods",
-            callback_data="list"
-        )
-    )
-
-
-    bot.send_message(
-        message.chat.id,
-        "Admin Panel",
-        reply_markup=kb
+/add - اضافه کردن مود
+/del - حذف مود
+/mods - لیست مودها
+"""
     )
 
 
 
-# ADD MOD
+@bot.message_handler(commands=["add"])
+def add(message):
 
-@bot.callback_query_handler(
-    func=lambda c:c.data=="add"
-)
-def add_mod(call):
-
-    admin_state[
-        call.from_user.id
-    ] = "name"
-
-
-    bot.send_message(
-        call.message.chat.id,
-        "Send mod name:"
-    )
-
-
-
-@bot.message_handler(
-    func=lambda m:
-    is_admin(m.from_user.id)
-    and admin_state.get(m.from_user.id)=="name"
-)
-def get_name(message):
-
-    admin_state[
-        message.from_user.id
-    ] = {
-        "name":message.text,
-        "step":"file"
-    }
-
-
-    bot.send_message(
-        message.chat.id,
-        "Send file or link:"
-    )
-# SAVE FILE
-
-@bot.message_handler(
-    content_types=["document"]
-)
-def save_file(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
+    if message.from_user.id != ADMIN_ID:
         return
 
-    data = admin_state.get(
-        message.from_user.id
+    bot.reply_to(
+        message,
+        "فایل مود را ارسال کن."
     )
 
-    if not isinstance(data, dict):
+    bot.register_next_step_handler(
+        message,
+        get_file
+    )
+
+
+
+def get_file(message):
+
+    if not message.document:
         return
 
+    file_id = message.document.file_id
 
-    con = connect()
-    cur = con.cursor()
+    bot.reply_to(
+        message,
+        "اسم مود را ارسال کن."
+    )
+
+    bot.register_next_step_handler(
+        message,
+        save_mod,
+        file_id
+    )
+
+
+
+def save_mod(message,file_id):
+
+    name = message.text
 
     cur.execute(
-        """
-        INSERT INTO mods
-        (name,type,file_id)
-        VALUES (?,?,?)
-        """,
-        (
-            data["name"],
-            "file",
-            message.document.file_id
-        )
+        "INSERT INTO mods(name,file_id) VALUES(?,?)",
+        (name,file_id)
     )
+
+    db.commit()
 
     mod_id = cur.lastrowid
 
-    con.commit()
-    con.close()
+    username = bot.get_me().username
+
+    link = f"https://t.me/{username}?start=mod_{mod_id}"
 
 
-    del admin_state[
-        message.from_user.id
-    ]
+    bot.reply_to(
+        message,
+        f"""
+مود ذخیره شد.
 
+نام:
+{name}
 
-    link = (
-        f"https://t.me/"
-        f"{BOT_USERNAME}"
-        f"?start={mod_id}"
-    )
-
-
-    bot.send_message(
-        message.chat.id,
-        f"Mod Added\n\n{link}"
-    )
-
-
-
-# SAVE LINK
-
-@bot.message_handler(
-    func=lambda m:
-    is_admin(m.from_user.id)
-    and isinstance(
-        admin_state.get(m.from_user.id),
-        dict
-    )
-    and admin_state[m.from_user.id]["step"]=="file"
-)
-def save_link(message):
-
-    data = admin_state[
-        message.from_user.id
-    ]
-
-
-    con = connect()
-    cur = con.cursor()
-
-    cur.execute(
-        """
-        INSERT INTO mods
-        (name,type,url)
-        VALUES (?,?,?)
-        """,
-        (
-            data["name"],
-            "link",
-            message.text
-        )
-    )
-
-    mod_id = cur.lastrowid
-
-    con.commit()
-    con.close()
-
-
-    del admin_state[
-        message.from_user.id
-    ]
-
-
-    link = (
-        f"https://t.me/"
-        f"{BOT_USERNAME}"
-        f"?start={mod_id}"
-    )
-
-
-    bot.send_message(
-        message.chat.id,
-        f"Mod Added\n\n{link}"
+لینک اختصاصی:
+{link}
+"""
     )
 
 
 
-# SEND MOD
+@bot.message_handler(commands=["del"])
+def delete(message):
 
-def send_mod(chat_id, mod_id):
-
-    con = connect()
-    cur = con.cursor()
-
-    cur.execute(
-        "SELECT * FROM mods WHERE id=?",
-        (mod_id,)
-    )
-
-    mod = cur.fetchone()
-
-    con.close()
-
-
-    if not mod:
-
-        bot.send_message(
-            chat_id,
-            "Not found"
-        )
-
+    if message.from_user.id != ADMIN_ID:
         return
 
 
-    if mod[2] == "file":
+    try:
 
-        bot.send_document(
-            chat_id,
-            mod[3]
+        mod_id = message.text.split()[1]
+
+        cur.execute(
+            "DELETE FROM mods WHERE id=?",
+            (mod_id,)
         )
 
-    else:
+        db.commit()
 
-        kb = types.InlineKeyboardMarkup()
 
-        kb.add(
-            types.InlineKeyboardButton(
-                "Download",
-                url=mod[4]
-            )
+        bot.reply_to(
+            message,
+            "مود حذف شد."
         )
 
-        bot.send_message(
-            chat_id,
-            "Download:",
-            reply_markup=kb
+    except:
+
+        bot.reply_to(
+            message,
+            "مثال:
+/del 3"
         )
 
 
 
-# LIST
-
-@bot.callback_query_handler(
-    func=lambda c:c.data=="list"
-)
-def list_mods(call):
-
-    if not is_admin(call.from_user.id):
-        return
-
-
-    con = connect()
-    cur = con.cursor()
-
-    cur.execute(
-        "SELECT id,name FROM mods"
-    )
-
-    mods = cur.fetchall()
-
-    con.close()
-
-
-    text = "Mods:\n\n"
-
-    for m in mods:
-        text += f"{m[0]} - {m[1]}\n"
-
-
-    bot.send_message(
-        call.message.chat.id,
-        text
-    )
-
-
-
-# DELETE
-
-@bot.callback_query_handler(
-    func=lambda c:c.data=="delete"
-)
-def delete_start(call):
-
-    if not is_admin(call.from_user.id):
-        return
-
-
-    bot.send_message(
-        call.message.chat.id,
-        "Send Mod ID:"
-    )
-
-
-    admin_state[
-        call.from_user.id
-    ] = "delete"
-
-
-
-@bot.message_handler(
-    func=lambda m:
-    is_admin(m.from_user.id)
-    and admin_state.get(m.from_user.id)=="delete"
-)
-def delete_mod(message):
-
-    con = connect()
-    cur = con.cursor()
-
-    cur.execute(
-        "DELETE FROM mods WHERE id=?",
-        (message.text,)
-    )
-
-    con.commit()
-    con.close()
-
-
-    del admin_state[
-        message.from_user.id
-    ]
-
-
-    bot.send_message(
-        message.chat.id,
-        "Deleted"
-    )
-
-
-
-print("ONYX STREET BOT RUNNING")
+print("GTA ONYX BOT STARTED")
 
 bot.infinity_polling()
