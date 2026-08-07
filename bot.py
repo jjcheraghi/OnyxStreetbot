@@ -1,522 +1,529 @@
 import telebot
+from telebot import types
 import json
 import os
 
+# =========================
+# SETTINGS
+# =========================
+
 TOKEN = "8926088350:AAElvXxA3gADwdLbEFxyZ3WIiyIi0qow74Q"
 
-CHANNEL = "@Onyx_Street"
 ADMIN_ID = 8356358583
+CHANNEL = "@Onyx_Street"
 
 bot = telebot.TeleBot(TOKEN)
 
-DB = "mods.json"
+DB_FILE = "mods.json"
 
-if not os.path.exists(DB):
-    with open(DB, "w") as f:
-        json.dump([], f)
+
+# =========================
+# DATABASE
+# =========================
+
+if not os.path.exists(DB_FILE):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump([], f, ensure_ascii=False)
 
 
 def load_mods():
-    with open(DB, "r") as f:
+    with open(DB_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save_mods(data):
-    with open(DB, "w") as f:
-        json.dump(data, f, indent=4)
+def save_mods(mods):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(mods, f, indent=4, ensure_ascii=False)
 
+
+# =========================
+# ADMIN STATES
+# =========================
+
+admin_state = {}
+
+
+# =========================
+# CHECK ADMIN
+# =========================
+
+def is_admin(user_id):
+    return user_id == ADMIN_ID
+
+
+# =========================
+# CHECK CHANNEL MEMBERSHIP
+# =========================
 
 def is_member(user_id):
+
     try:
-        status = bot.get_chat_member(CHANNEL, user_id).status
-        return status in ["member", "administrator", "creator"]
+        member = bot.get_chat_member(CHANNEL, user_id)
+
+        return member.status in [
+            "member",
+            "administrator",
+            "creator"
+        ]
+
     except:
         return False
 
 
+# =========================
+# START
+# =========================
+
 @bot.message_handler(commands=["start"])
 def start(message):
+
     if not is_member(message.from_user.id):
-        bot.reply_to(
-            message,
-            f"برای استفاده اول عضو کانال شوید:\n{CHANNEL}"
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "📢 عضویت در کانال",
+                url="https://t.me/Onyx_Street"
+            )
         )
+
+        bot.send_message(
+            message.chat.id,
+            "❌ برای استفاده از ربات ابتدا عضو کانال شوید.",
+            reply_markup=keyboard
+        )
+
         return
 
-    bot.reply_to(
-        message,
-        "سلام 👋\nربات دانلود مود آماده است.\n\n"
-        "/mods - لیست مودها"
+    keyboard = types.InlineKeyboardMarkup()
+
+    if is_admin(message.from_user.id):
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "⚙️ پنل ادمین",
+                callback_data="admin_panel"
+            )
+        )
+
+    bot.send_message(
+        message.chat.id,
+        "🚗 به ربات مود Onyx Street خوش آمدید.",
+        reply_markup=keyboard
     )
 
 
-@bot.message_handler(commands=["mods"])
-def mods(message):
-    if not is_member(message.from_user.id):
-        return
+# =========================
+# ADMIN COMMAND
+# =========================
 
-    data = load_mods()
+@bot.message_handler(commands=["admin"])
+def admin_command(message):
 
-    if not data:
-        bot.reply_to(message, "هیچ مودی ثبت نشده.")
-        return
-
-    text = "📦 لیست مودها:\n\n"
-
-    for m in data:
-        text += f"🔹 {m['id']} - {m['name']}\n{m['link']}\n\n"
-
-    bot.reply_to(message, text)
-
-
-@bot.message_handler(commands=["add"])
-def add(message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    bot.reply_to(
-        message,
-        "فرمت ارسال:\n\n"
-        "نام مود | لینک دانلود\n\n"
-        "یا بعد از دستور فایل را ارسال کنید."
-    )
-
-
-@bot.message_handler(content_types=["document"])
-def file_upload(message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    data = load_mods()
-
-    new_id = len(data)+1
-
-    file_id = message.document.file_id
-
-    data.append({
-        "id": new_id,
-        "name": message.document.file_name,
-        "link": file_id,
-        "type": "file"
-    })
-
-    save_mods(data)
-
-    bot.reply_to(
-        message,
-        "✅ فایل مود ذخیره شد."
-    )
-
-
-@bot.message_handler(commands=["delete"])
-def delete(message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    try:
-        num = int(message.text.split()[1])
-
-        data = load_mods()
-
-        data = [
-            x for x in data
-            if x["id"] != num
-        ]
-
-        save_mods(data)
+    if not is_admin(message.from_user.id):
 
         bot.reply_to(
             message,
-            "✅ مود حذف شد."
+            "❌ شما دسترسی ادمین ندارید."
         )
 
-    except:
-        bot.reply_to(
-            message,
-            "استفاده:\n/delete شماره"
-        )
-
-
-@bot.message_handler(func=lambda m: "|" in m.text)
-def add_link(message):
-
-    if message.from_user.id != ADMIN_ID:
         return
 
-    name, link = message.text.split("|",1)
+    show_admin_panel(message.chat.id)
 
-    data = load_mods()
 
-    data.append({
-        "id": len(data)+1,
-        "name": name.strip(),
-        "link": link.strip(),
-        "type": "link"
-    })
+# =========================
+# ADMIN PANEL
+# =========================
 
-    save_mods(data)
+def show_admin_panel(chat_id):
 
-    bot.reply_to(
-        message,
-        "✅ لینک مود اضافه شد."
+    keyboard = types.InlineKeyboardMarkup()
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "➕ اضافه کردن مود",
+            callback_data="add_mod"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "🗑 حذف مود",
+            callback_data="delete_mod"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📦 لیست مودها",
+            callback_data="list_mods"
+        )
+    )
+
+    bot.send_message(
+        chat_id,
+        "⚙️ پنل مدیریت\n\n"
+        "عملیات موردنظر را انتخاب کنید:",
+        reply_markup=keyboard
     )
 
 
-print("Bot Started...")
-# وضعیت انتظار ادمین
-admin_state = {}
+# =========================
+# ADMIN PANEL BUTTON
+# =========================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "admin_panel"
+)
+def admin_panel_button(call):
+
+    if not is_admin(call.from_user.id):
+        return
+
+    show_admin_panel(call.message.chat.id)
+
+    bot.answer_callback_query(call.id)
 
 
-# دکمه افزودن مود
-@bot.callback_query_handler(func=lambda call: call.data=="add")
+# =========================
+# ADD MOD
+# =========================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "add_mod"
+)
 def add_mod(call):
 
-    if call.from_user.id != ADMIN_ID:
+    if not is_admin(call.from_user.id):
         return
 
-    admin_state[call.from_user.id] = "name"
+    admin_state[call.from_user.id] = {
+        "step": "name"
+    }
 
     bot.send_message(
         call.message.chat.id,
-        "📝 نام مود را ارسال کنید:"
+        "📝 نام مود را ارسال کن:"
     )
 
+    bot.answer_callback_query(call.id)
 
 
-# دریافت اطلاعات ادمین
-@bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID)
-def admin_input(message):
+# =========================
+# ADMIN TEXT INPUT
+# =========================
 
-    user_id = message.from_user.id
+@bot.message_handler(
+    func=lambda message:
+    is_admin(message.from_user.id)
+    and message.from_user.id in admin_state
+)
+def admin_text(message):
 
-    if user_id not in admin_state:
+    state = admin_state[message.from_user.id]
+
+    # NAME
+    if state["step"] == "name":
+
+        state["name"] = message.text
+        state["step"] = "type"
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "📤 فایل",
+                callback_data="type_file"
+            )
+        )
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "🔗 لینک",
+                callback_data="type_link"
+            )
+        )
+
+        bot.send_message(
+            message.chat.id,
+            "نوع مود را انتخاب کن:",
+            reply_markup=keyboard
+        )
+
+
+# =========================
+# FILE TYPE
+# =========================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "type_file"
+)
+def type_file(call):
+
+    if not is_admin(call.from_user.id):
         return
 
+    if call.from_user.id not in admin_state:
+        return
 
-    step = admin_state[user_id]
+    admin_state[call.from_user.id]["step"] = "file"
 
+    bot.send_message(
+        call.message.chat.id,
+        "📤 حالا فایل مود را ارسال کن:"
+    )
 
-    # گرفتن نام
-    if step == "name":
-
-        admin_state[user_id] = {
-            "name": message.text
-        }
-
-        bot.send_message(
-            message.chat.id,
-            "📂 دسته بندی مود را ارسال کنید:\n\n"
-            "مثال:\n"
-            "GTA V\n"
-            "BeamNG\n"
-            "Assetto Corsa"
-        )
-
-        admin_state[user_id]["step"] = "category"
+    bot.answer_callback_query(call.id)
 
 
+# =========================
+# LINK TYPE
+# =========================
 
-    # گرفتن دسته
-    elif isinstance(step, dict) and step["step"] == "category":
+@bot.callback_query_handler(
+    func=lambda call: call.data == "type_link"
+)
+def type_link(call):
 
-        step["category"] = message.text
-        step["step"] = "file"
+    if not is_admin(call.from_user.id):
+        return
 
-        bot.send_message(
-            message.chat.id,
-            "📦 حالا فایل مود را ارسال کنید\n"
-            "یا لینک دانلود را بفرستید."
-        )
+    if call.from_user.id not in admin_state:
+        return
+
+    admin_state[call.from_user.id]["step"] = "link"
+
+    bot.send_message(
+        call.message.chat.id,
+        "🔗 حالا لینک دانلود مود را ارسال کن:"
+    )
+
+    bot.answer_callback_query(call.id)
 
 
+# =========================
+# RECEIVE FILE
+# =========================
 
-# دریافت فایل
-@bot.message_handler(content_types=["document"])
-def get_file(message):
+@bot.message_handler(
+    content_types=["document"]
+)
+def receive_file(message):
 
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
 
     if message.from_user.id not in admin_state:
         return
 
+    state = admin_state[message.from_user.id]
 
-    info = admin_state[message.from_user.id]
-
-    if not isinstance(info, dict):
+    if state["step"] != "file":
         return
 
+    mods = load_mods()
 
-    data = load_db()
+    new_id = len(mods) + 1
 
-
-    data.append({
-        "id": len(data)+1,
-        "name": info["name"],
-        "category": info["category"],
+    mods.append({
+        "id": new_id,
+        "name": state["name"],
         "type": "file",
         "file_id": message.document.file_id
     })
 
-
-    save_db(data)
+    save_mods(mods)
 
     del admin_state[message.from_user.id]
 
-
-    bot.reply_to(
-        message,
-        "✅ مود با فایل ذخیره شد."
-    )
-
-
-
-# دریافت لینک
-@bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID)
-def get_link(message):
-
-    if message.from_user.id not in admin_state:
-        return
-
-    info = admin_state[message.from_user.id]
-
-    if not isinstance(info, dict):
-        return
-
-    if info.get("step") == "file":
-
-        data = load_db()
-
-
-        data.append({
-            "id": len(data)+1,
-            "name": info["name"],
-            "category": info["category"],
-            "type": "link",
-            "link": message.text
-        })
-
-
-        save_db(data)
-
-        del admin_state[message.from_user.id]
-
-
-        bot.reply_to(
-            message,
-            "✅ لینک مود ذخیره شد."
-    )
- # نمایش لیست مودها
-@bot.callback_query_handler(func=lambda call: call.data=="mods")
-def show_mods(call):
-
-    data = load_db()
-
-    if not data:
-        bot.answer_callback_query(
-            call.id,
-            "هیچ مودی ثبت نشده",
-            show_alert=True
-        )
-        return
-
-
-    kb = types.InlineKeyboardMarkup()
-
-
-    for mod in data:
-        kb.add(
-            types.InlineKeyboardButton(
-                f"{mod['name']} | {mod['category']}",
-                callback_data=f"mod_{mod['id']}"
-            )
-        )
-
-
-    bot.edit_message_text(
-        "📦 لیست مودها:",
-        call.message.chat.id,
-        call.message.id,
-        reply_markup=kb
-    )
-
-
-
-# باز کردن مود
-@bot.callback_query_handler(func=lambda call: call.data.startswith("mod_"))
-def open_mod(call):
-
-    mod_id = int(call.data.split("_")[1])
-
-    data = load_db()
-
-    mod = None
-
-    for m in data:
-        if m["id"] == mod_id:
-            mod = m
-            break
-
-
-    if not mod:
-        return
-
-
-    kb = types.InlineKeyboardMarkup()
-
-    if mod["type"] == "file":
-
-        kb.add(
-            types.InlineKeyboardButton(
-                "📥 دریافت فایل",
-                callback_data=f"file_{mod_id}"
-            )
-        )
-
-    else:
-
-        kb.add(
-            types.InlineKeyboardButton(
-                "🔗 دانلود",
-                url=mod["link"]
-            )
-        )
-
-
     bot.send_message(
-        call.message.chat.id,
-        f"🚗 {mod['name']}\n\n"
-        f"📂 دسته: {mod['category']}",
-        reply_markup=kb
+        message.chat.id,
+        f"✅ مود با موفقیت اضافه شد.\n\n"
+        f"📦 {state['name']}\n"
+        f"🆔 ID: {new_id}"
     )
 
 
+# =========================
+# RECEIVE LINK
+# =========================
 
-# ارسال فایل
-@bot.callback_query_handler(func=lambda call: call.data.startswith("file_"))
-def send_file(call):
+@bot.message_handler(
+    func=lambda message:
+    is_admin(message.from_user.id)
+    and message.from_user.id in admin_state
+    and admin_state[message.from_user.id]["step"] == "link"
+)
+def receive_link(message):
 
-    mod_id = int(call.data.split("_")[1])
+    state = admin_state[message.from_user.id]
 
-    data = load_db()
+    mods = load_mods()
 
-    for mod in data:
+    new_id = len(mods) + 1
 
-        if mod["id"] == mod_id:
+    mods.append({
+        "id": new_id,
+        "name": state["name"],
+        "type": "link",
+        "link": message.text
+    })
 
-            bot.send_document(
-                call.message.chat.id,
-                mod["file_id"]
-            )
+    save_mods(mods)
 
-            break
-
-
-
-# حذف مود
-@bot.callback_query_handler(func=lambda call: call.data=="delete")
-def delete_menu(call):
-
-    if call.from_user.id != ADMIN_ID:
-        return
-
-
-    data = load_db()
-
-    kb = types.InlineKeyboardMarkup()
-
-
-    for mod in data:
-        kb.add(
-            types.InlineKeyboardButton(
-                f"🗑 {mod['name']}",
-                callback_data=f"del_{mod['id']}"
-            )
-        )
-
-
-    bot.send_message(
-        call.message.chat.id,
-        "مودی که می‌خواهی حذف شود را انتخاب کن:",
-        reply_markup=kb
-    )
-
-
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("del_"))
-def delete_confirm(call):
-
-    if call.from_user.id != ADMIN_ID:
-        return
-
-
-    mod_id = int(call.data.split("_")[1])
-
-    data = load_db()
-
-
-    data = [
-        m for m in data
-        if m["id"] != mod_id
-    ]
-
-
-    # شماره‌ها دوباره مرتب شوند
-    for i, m in enumerate(data):
-        m["id"] = i + 1
-
-
-    save_db(data)
-
-
-    bot.answer_callback_query(
-        call.id,
-        "✅ مود حذف شد",
-        show_alert=True
-    )  
-    @bot.message_handler(commands=["admin"])
-def admin_command(message):
-
-    if message.from_user.id != ADMIN_ID:
-        bot.reply_to(
-            message,
-            "❌ دسترسی ندارید."
-        )
-        return
-
-    kb = types.InlineKeyboardMarkup()
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "➕ افزودن مود",
-            callback_data="add"
-        )
-    )
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "🗑 حذف مود",
-            callback_data="delete"
-        )
-    )
-
-    kb.add(
-        types.InlineKeyboardButton(
-            "📊 آمار",
-            callback_data="stats"
-        )
-    )
+    del admin_state[message.from_user.id]
 
     bot.send_message(
         message.chat.id,
-        "⚙️ پنل مدیریت:",
-        reply_markup=kb
+        f"✅ مود با موفقیت اضافه شد.\n\n"
+        f"📦 {state['name']}\n"
+        f"🆔 ID: {new_id}"
     )
-    @bot.message_handler(commands=["admin"])
-def admin_test(message):
-    bot.reply_to(message, "پنل ادمین فعال شد")
 
-bot.infinity_polling()
+
+# =========================
+# LIST MODS
+# =========================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "list_mods"
+)
+def list_mods(call):
+
+    if not is_admin(call.from_user.id):
+        return
+
+    mods = load_mods()
+
+    if not mods:
+
+        bot.send_message(
+            call.message.chat.id,
+            "📦 هنوز هیچ مودی اضافه نشده."
+        )
+
+        return
+
+    text = "📦 لیست مودها:\n\n"
+
+    for mod in mods:
+
+        text += (
+            f"🆔 {mod['id']}\n"
+            f"📦 {mod['name']}\n"
+            f"📌 نوع: {mod['type']}\n\n"
+        )
+
+    bot.send_message(
+        call.message.chat.id,
+        text
+    )
+
+    bot.answer_callback_query(call.id)
+
+
+# =========================
+# DELETE MOD MENU
+# =========================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "delete_mod"
+)
+def delete_mod_menu(call):
+
+    if not is_admin(call.from_user.id):
+        return
+
+    mods = load_mods()
+
+    if not mods:
+
+        bot.send_message(
+            call.message.chat.id,
+            "❌ هیچ مودی برای حذف وجود ندارد."
+        )
+
+        return
+
+    keyboard = types.InlineKeyboardMarkup()
+
+    for mod in mods:
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                f"🗑 {mod['id']} - {mod['name']}",
+                callback_data=f"delete_{mod['id']}"
+            )
+        )
+
+    bot.send_message(
+        call.message.chat.id,
+        "🗑 مود موردنظر برای حذف را انتخاب کن:",
+        reply_markup=keyboard
+    )
+
+    bot.answer_callback_query(call.id)
+
+
+# =========================
+# DELETE MOD
+# =========================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith("delete_")
+)
+def delete_mod(call):
+
+    if not is_admin(call.from_user.id):
+        return
+
+    mod_id = int(
+        call.data.split("_")[1]
+    )
+
+    mods = load_mods()
+
+    new_mods = [
+        mod for mod in mods
+        if mod["id"] != mod_id
+    ]
+
+    if len(new_mods) == len(mods):
+
+        bot.answer_callback_query(
+            call.id,
+            "❌ مود پیدا نشد.",
+            show_alert=True
+        )
+
+        return
+
+    # مرتب کردن IDها
+    for index, mod in enumerate(new_mods, start=1):
+        mod["id"] = index
+
+    save_mods(new_mods)
+
+    bot.answer_callback_query(
+        call.id,
+        "✅ مود حذف شد.",
+        show_alert=True
+    )
+
+    bot.send_message(
+        call.message.chat.id,
+        "✅ مود با موفقیت حذف شد."
+    )
+
+
+# =========================
+# RUN BOT
+# =========================
+
+print("ONYX STREET BOT STARTED")
+
+bot.infinity_polling(
+    skip_pending=True
+        )
