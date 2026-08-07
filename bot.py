@@ -314,3 +314,162 @@ def receive_link(m):
         "Mod added.\n\n"
         f"Mod Link:\n{link}"
     )
+def send_mod(chat_id, mod_id):
+
+    mods = load_mods()
+
+    mod = None
+
+    for item in mods:
+        if item["id"] == mod_id:
+            mod = item
+            break
+
+
+    if not mod:
+
+        bot.send_message(
+            chat_id,
+            "Mod not found."
+        )
+
+        return
+
+
+    if mod["type"] == "file":
+
+        bot.send_document(
+            chat_id,
+            mod["file_id"],
+            caption=mod["name"]
+        )
+
+    else:
+
+        kb = types.InlineKeyboardMarkup()
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "Download",
+                url=mod["url"]
+            )
+        )
+
+        bot.send_message(
+            chat_id,
+            mod["name"],
+            reply_markup=kb
+        )
+
+
+
+@bot.callback_query_handler(
+    func=lambda c: c.data == "list"
+)
+def mod_list(c):
+
+    if not is_admin(c.from_user.id):
+        return
+
+
+    mods = load_mods()
+
+
+    if not mods:
+
+        bot.send_message(
+            c.message.chat.id,
+            "No mods."
+        )
+
+        return
+
+
+    text = "Added Mods:\n\n"
+
+
+    for mod in mods:
+
+        text += (
+            f"{mod['id']} - "
+            f"{mod['name']}\n"
+        )
+
+
+    bot.send_message(
+        c.message.chat.id,
+        text
+    )
+
+
+
+@bot.callback_query_handler(
+    func=lambda c: c.data == "delete"
+)
+def delete_menu(c):
+
+    if not is_admin(c.from_user.id):
+        return
+
+
+    kb = types.InlineKeyboardMarkup()
+
+
+    for mod in load_mods():
+
+        kb.add(
+            types.InlineKeyboardButton(
+                f"Delete {mod['name']}",
+                callback_data=f"del_{mod['id']}"
+            )
+        )
+
+
+    bot.send_message(
+        c.message.chat.id,
+        "Choose mod:",
+        reply_markup=kb
+    )
+
+
+
+@bot.callback_query_handler(
+    func=lambda c:
+    c.data.startswith("del_")
+)
+def delete_mod(c):
+
+    if not is_admin(c.from_user.id):
+        return
+
+
+    mod_id = int(
+        c.data.split("_")[1]
+    )
+
+
+    mods = load_mods()
+
+
+    mods = [
+        mod for mod in mods
+        if mod["id"] != mod_id
+    ]
+
+
+    save_mods(mods)
+
+
+    bot.send_message(
+        c.message.chat.id,
+        "Mod deleted."
+    )
+
+
+
+print("ONYX STREET BOT RUNNING")
+
+
+bot.infinity_polling(
+    skip_pending=True
+)
